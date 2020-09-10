@@ -1,0 +1,62 @@
+############################################################
+# Bash tools you can 'source' from another Bash script.
+#
+# John Robertson <john@rrci.com>
+# Initial release: Thu Sep 10 11:58:23 EDT 2020
+#
+
+# Global array to use as a return stack
+declare -g -a __RTN_STK
+
+function RTN_push
+############################################################
+# Use this to push things onto the global return stack
+# Arguments:
+#    Whatever strings you wish placed on the stack
+#
+{
+   # Necessary to avoid "unbound variable" exception for empty stack
+   local OPTS=$(shopt -o -p nounset errexit)
+   set +ue
+
+   # For readability, store array index value here before using
+   local -i ndx
+   # Push arguments onto the stack
+   while [[ -n "$1" ]]; do
+
+      # Array index is current size of array
+      ndx=${#__RTN_STK[@]}
+      # Place argument onto stack
+      __RTN_STK[$ndx]="$1"
+      # Discard argument from argv
+      shift
+   done
+   # Restore options
+   eval $OPTS
+}
+
+function RTN_pop
+############################################################
+# Use this to pop things off of the return stack
+# Arguments:
+#    Names of global varibles to be loaded by popping
+#    strings from the stack.
+#
+{
+   # Necessary to avoid "unbound variable" exception
+   local OPTS=$(shopt -o -p nounset)
+   set +u
+
+   local -i arg ndx
+   for (( arg= $#; arg ; --arg )); do
+      ndx=${#__RTN_STK[@]}
+      (( --ndx ))
+      eval ${!arg}="\${__RTN_STK[\$ndx]}"
+      # pop from stack
+      unset __RTN_STK[$ndx]
+   done
+
+   # Restore options
+   eval $OPTS
+}
+

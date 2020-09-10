@@ -8,6 +8,16 @@
 # Global array to use as a return stack
 declare -g -a __RTN_STK
 
+function RTN_empty
+############################################################
+# Return logical TRUE if stack is empty, FALSE otherwise
+# Arguments:
+#    none
+#
+{
+   return ${#__RTN_STK[@]}
+}
+
 function RTN_push
 ############################################################
 # Use this to push things onto the global return stack
@@ -21,16 +31,21 @@ function RTN_push
 
    # For readability, store array index value here before using
    local -i ndx
+
    # Push arguments onto the stack
    while [[ -n "$1" ]]; do
 
       # Array index is current size of array
       ndx=${#__RTN_STK[@]}
+
       # Place argument onto stack
       __RTN_STK[$ndx]="$1"
+
       # Discard argument from argv
       shift
+
    done
+
    # Restore options
    eval $OPTS
 }
@@ -52,7 +67,7 @@ function RTN_pop
       ndx=${#__RTN_STK[@]}
       (( --ndx ))
       eval ${!arg}="\${__RTN_STK[\$ndx]}"
-      # pop from stack
+      # pop from stack, free memory
       unset __RTN_STK[$ndx]
    done
 

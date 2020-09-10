@@ -1,5 +1,13 @@
 #!/bin/bash
+############################################################
+# Example script to demonstrate recursion without the
+# use of subshells
+#
+# John Robertson <john@rrci.com>
+# Initial release: Thu Sep 10 11:58:23 EDT 2020
+#
 
+# Halt on error, no globbing, no unbound variables
 set -efu
 
 # import return stack tools

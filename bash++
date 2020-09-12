@@ -25,21 +25,21 @@ function RTN_push
 #    Whatever strings you wish placed on the stack
 #
 {
+   local __opts=$(shopt -o -p nounset errexit)
    # Necessary to avoid "unbound variable" exception for empty stack
-   local OPTS=$(shopt -o -p nounset errexit)
    set +ue
 
    # For readability, store array index value here before using
-   local -i ndx
+   local -i __ndx
 
    # Push arguments onto the stack
    while [[ -n "$1" ]]; do
 
       # Array index is current size of array
-      ndx=${#__RTN_STK[@]}
+      __ndx=${#__RTN_STK[@]}
 
       # Place argument onto stack
-      __RTN_STK[$ndx]="$1"
+      __RTN_STK[$__ndx]="$1"
 
       # Discard argument from argv
       shift
@@ -47,7 +47,7 @@ function RTN_push
    done
 
    # Restore options
-   eval $OPTS
+   eval $__opts
 }
 
 function RTN_pop
@@ -59,19 +59,138 @@ function RTN_pop
 #
 {
    # Necessary to avoid "unbound variable" exception
-   local OPTS=$(shopt -o -p nounset)
+   local __opts=$(shopt -o -p nounset)
    set +u
 
-   local -i arg ndx
-   for (( arg= $#; arg ; --arg )); do
-      ndx=${#__RTN_STK[@]}
-      (( --ndx ))
-      eval ${!arg}="\${__RTN_STK[\$ndx]}"
-      # pop from stack, free memory
-      unset __RTN_STK[$ndx]
+   local -i __arg __ndx
+   # Walk through supplied references backwards
+   for (( __arg= $#; __arg ; --__arg )); do
+
+      # Generate correct array index
+      (( __ndx = ${#__RTN_STK[@]} - 1 ))
+
+      # Copy item on stack to *reference
+      eval ${!__arg}="\${__RTN_STK[\$__ndx]}"
+
+      # pop item from stack, free memory
+      unset __RTN_STK[$__ndx]
    done
 
    # Restore options
-   eval $OPTS
+   eval $__opts
+}
+
+# Global heap counter integer 
+declare -g -i __HC=0
+
+function malloc
+############################################################
+# Allocate a global "address" from the "heap"
+# Arguments:
+#    0 or more flags which will be passed to the 'declare' builtin.
+#      e.g. '-A' for associative array 
+# Returns:
+#   "address" of allocated memory
+#
+{
+   # Increment global heap counter
+   (( ++__HC ))
+
+   # compose unique "address" for this allocation
+   local __addr="__heap_${__HC}"
+
+   # "allocate" object marked for global visibility,
+   # and possibly other 'declare' flags
+   declare -g $@ $__addr
+   # push "address" onto result stack
+   RTN_push $__addr
+}
+
+function throw ()
+############################################################
+# Print an error message and exit.
+# Arguments:
+#   string1
+#   ...
+# Returns:
+#   Nothing
+#
+{
+   local pfix='ERROR:'
+   while [[ -n $1 ]]; do
+      echo "$pfix $1"
+      pfix= $'\t'
+   done
+   exit 1
+}
+
+function new ()
+############################################################
+# 'new' operator to allocate object & call class constructor
+# Arguments:
+#   classname
+#   constructor_arg1         (optional)
+#   ...
+# Returns:
+#   "address" of new object
+#
+{
+   # Stash the class name with the object
+   local __class=$1
+
+   # Discard class name from argv
+   shift
+
+   # Allocate an associative array from our "heap"
+   malloc -A
+
+   # Retrieve "address" of new object
+   RTN_pop __R1
+
+   # Imprint class name on the object
+   eval $__R1[__class]=$__class
+
+   # Call class constructor
+   eval $__class::$__class $__R1  \$@
+
+   # Push address on return stack
+   RTN_push $__R1
+
+}
+
+function delete ()
+############################################################
+# 'delete' operator to call class destructor, free object
+# Arguments:
+#   object_address
+# Returns:
+#   nothing
+#
+{
+   # address of object
+   local __self=$1
+
+   # class name of object
+   eval local __class=\${$__self[__class]}
+
+   # Call class destructor
+   eval $__class::~$__class $__self
+
+   # Free object memory
+   unset $__self
+}
+
+
+function show ()
+############################################################
+# Print object contents
+# Arguments:
+#   object1_address
+#   ...
+# Returns:
+#   Nothing
+#
+{
+   declare -p $@
 }
 

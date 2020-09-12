@@ -168,16 +168,16 @@ function delete ()
 #
 {
    # address of object
-   local __self=$1
+   local __this=$1
 
    # class name of object
-   eval local __class=\${$__self[__class]}
+   eval local __class=\${$__this[__class]}
 
    # Call class destructor
-   eval $__class::~$__class $__self
+   eval $__class::~$__class $__this
 
    # Free object memory
-   unset $__self
+   unset $__this
 }
 
 
@@ -186,11 +186,50 @@ function show ()
 # Print object contents
 # Arguments:
 #   object1_address
+#   object2_address (optional)
 #   ...
 # Returns:
 #   Nothing
 #
 {
    declare -p $@
+}
+
+function fetch ()
+############################################################
+# Convenient way to access class member values
+# Arguments:
+#   address.member
+# Returns:
+#   value of member on the return stack
+#
+{
+   # address of object
+   local __this=${1%.?*} __member=${1#?*.}
+
+   eval RTN_push \"\${$__this[$__member]}\"
+
+}
+
+function call ()
+############################################################
+# Call an object member function
+# Arguments:
+#   address.funcName
+#   suffix1   (optional)
+#   ...
+# Returns:
+#   Whatever funcName() returns
+#
+{
+   # address of object
+   local __this=${1%.?*} __func=${1#?*.}
+   # class name of object
+   eval local __class=\${$__this[__class]}
+
+   shift
+
+   # Call class member function
+   eval $__class::$__func $__this \$@
 }
 

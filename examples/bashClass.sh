@@ -9,7 +9,7 @@
 # Halt on error, no globbing, no unbound variables
 set -efu
 
-# import return stack tools
+# import oop facilities
 source ../bash++
 
 ###################################

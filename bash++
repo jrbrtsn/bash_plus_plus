@@ -1,8 +1,11 @@
 ############################################################
-# Bash tools you can 'source' from another Bash script.
+# Bash resources you can 'source' from your Bash script.
 #
 # John Robertson <john@rrci.com>
 # Initial release: Thu Sep 10 11:58:23 EDT 2020
+#
+# Fri Sep 11 22:13:16 EDT 2020
+# Added malloc, new, delete, call, and fetch
 #
 
 # Global array to use as a return stack
@@ -106,24 +109,6 @@ function malloc
    RTN_push $__addr
 }
 
-function throw ()
-############################################################
-# Print an error message and exit.
-# Arguments:
-#   string1
-#   ...
-# Returns:
-#   Nothing
-#
-{
-   local pfix='ERROR:'
-   while [[ -n $1 ]]; do
-      echo "$pfix $1"
-      pfix= $'\t'
-   done
-   exit 1
-}
-
 function new ()
 ############################################################
 # 'new' operator to allocate object & call class constructor
@@ -216,7 +201,7 @@ function call ()
 # Call an object member function
 # Arguments:
 #   address.funcName
-#   suffix1   (optional)
+#   func_arg1 (optional)
 #   ...
 # Returns:
 #   Whatever funcName() returns

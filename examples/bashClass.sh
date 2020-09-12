@@ -59,23 +59,6 @@ function FirstClass::~FirstClass ()
    eval unset $this[catstr]
 }
 
-function FirstClass::catstr ()
-###################################
-# accessor function for FirstClass
-# member: catstr
-# Arguments:
-#   None
-# Returns:
-#   value of catstr
-#
-{
-   local this=$1
-
-   # Accessors for convenient access to member values
-   eval RTN_push \"\${$this[catstr]}\"
-
-}
-
 function FirstClass::wordCount ()
 ###################################
 # Return the word count of catstr
@@ -89,8 +72,7 @@ function FirstClass::wordCount ()
    local this=$1
 
    # Retrive the catstr member value
-   fetch $this.catstr
-   RTN_pop R1
+   fetch $this.catstr; RTN_pop R1
 
    # Run through 'wc' command, store result
    # on return stack.
@@ -112,15 +94,13 @@ RTN_pop h_fc
 show $h_fc
 
 # Access a member value
-fetch $h_fc.catstr
-RTN_pop str
+fetch $h_fc.catstr; RTN_pop str
 
 # Print member value
 echo "catstr= '$str'"
 
 # Get the word count
-call $h_fc.wordCount
-RTN_pop n
+call $h_fc.wordCount; RTN_pop n
 echo "word count= $n"
 
 # Delete object

@@ -102,7 +102,7 @@ function malloc
    # compose unique "address" for this allocation
    local __addr="__heap_${__HC}"
 
-   # "allocate" object marked for global visibility,
+   # "allocate" object gets marked for global visibility,
    # and possibly other 'declare' flags
    declare -g $@ $__addr
    # push "address" onto result stack

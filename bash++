@@ -218,3 +218,56 @@ function call ()
    eval $__class::$__func $__this \$@
 }
 
+function regex_read ()
+############################################################
+# Similar to bash 'read' builtin, but parses subsequent
+# read buffer using the supplied regular expression.
+# Arguments:
+#   regex pattern
+# Returns:
+#   logical TRUE if read was successful
+#   or logical FALSE on end-of-file condition.
+# Return stack:
+#   Full string match (if any)
+#   token1_match (if any)
+#   ...
+#   Last argument is _always_ number of matches found. Pop it first.
+#   
+{
+   # Stash the regular expression
+   local ndx count regex="$1"
+
+   # All other args are for 'read'
+   shift
+
+   # Call read with other supplied args. Fails on EOF
+   read $@ || return 1
+
+   # Apply regular expression parsing to read buffer
+   if [[ "$REPLY" =~ $regex ]]; then
+      # Place results on return stack
+      count=${#BASH_REMATCH[@]}
+      for (( ndx= 0; ndx < count; ++ndx )); do
+         RTN_push "${BASH_REMATCH[$ndx]}"
+      done
+      # Last stack arg is number of match results
+      RTN_push $count
+
+   else
+      # regex failed to match
+      RTN_push 0
+   fi
+}
+
+function die ()
+############################################################
+# Same as 'die' in perl - Print supplied args to stderr
+# prefixed with source file name and line number,
+# then exit indicating error.
+#
+{
+  read LINE FILE < <(caller)
+  1>&2 echo "$FILE:$LINE $@"
+  exit 1
+}
+

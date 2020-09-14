@@ -44,7 +44,7 @@ while regex_read '^([^ ]+ [^ ]+ [^ ]+) .*systemd\[([^:]*)\]: (.*)' -u $FD; do
 
          # Use builtin bash menuing to branch on user's choice
          PS3='Action? '
-         select action in ignore review quit; do
+         select action in 'ignore' 'review' 'quit'; do
 
             case $action in
 

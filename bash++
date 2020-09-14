@@ -241,7 +241,7 @@ function regex_read ()
    shift
 
    # Call read with other supplied args. Fails on EOF
-   read $@ || return 1
+   IFS= read $@ || return 1
 
    # Apply regular expression parsing to read buffer
    if [[ "$REPLY" =~ $regex ]]; then

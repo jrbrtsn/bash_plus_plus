@@ -30,41 +30,33 @@ while regex_read '^([^ ]+ [^ ]+ [^ ]+) .*systemd\[([^:]*)\]: (.*)' -u $FD; do
    # First fetch the number of matches from the return stack.
    RTN_pop n_matches
 
-   case $n_matches in
+   # Not interested in partial matches
+   (( n_matches == 4 )) || continue
 
-      # No interest here
-      0) continue;;
+   RTN_pop full_match dateStamp pid msg
+   # Clear the terminal
+   clear
+#  "Full match is: '$full_match'"
+   echo "systemd message: pid= '$pid', dateStamp= '$dateStamp',  msg= '$msg'"
 
-      4) # Pop match results from return stack into variables.
-         RTN_pop full_match dateStamp pid msg
-         # Clear the terminal
-         clear
-#         "Full match is: '$full_match'"
-         echo "systemd message: pid= '$pid', dateStamp= '$dateStamp',  msg= '$msg'"
+   # Use builtin bash menuing to branch on user's choice
+   PS3='Action? '
+   select action in 'ignore' 'review' 'quit'; do
 
-         # Use builtin bash menuing to branch on user's choice
-         PS3='Action? '
-         select action in 'ignore' 'review' 'quit'; do
+      case $action in
 
-            case $action in
+         ignore) ;; # no worries
 
-               ignore) ;; # no worries
+         review) read -p 'Chase up all relevant information, present to user. [Return to continue] ';;
 
-               review) read -p 'Chase up all relevant information, present to user. [Return to continue] ';;
+         quit) exit 0;;
 
-               quit) exit 0;;
+      esac
 
-            esac
+      # go get another line from syslog
+      break
 
-            # go get another line from syslog
-            break
-
-         done # End of 'select' menu loop
-      ;; # Termination of '4)' clause
-
-      *) die "Woops - no implementation for '$n_matches' matches!";;
-
-   esac
+   done # End of 'select' menu loop
 
 done
 

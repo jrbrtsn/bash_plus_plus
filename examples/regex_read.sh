@@ -33,6 +33,7 @@ while regex_read '^([^ ]+ [^ ]+ [^ ]+) .*systemd\[([^:]*)\]: (.*)' -u $FD; do
    # Not interested in less than perfect match
    (( n_matches == 4 )) || continue
 
+   # Pop match results into variables
    RTN_pop full_match dateStamp pid msg
    # Clear the terminal
    clear

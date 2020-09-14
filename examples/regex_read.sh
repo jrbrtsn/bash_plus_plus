@@ -30,7 +30,7 @@ while regex_read '^([^ ]+ [^ ]+ [^ ]+) .*systemd\[([^:]*)\]: (.*)' -u $FD; do
    # First fetch the number of matches from the return stack.
    RTN_pop n_matches
 
-   # Not interested in partial matches
+   # Not interested in less than perfect match
    (( n_matches == 4 )) || continue
 
    RTN_pop full_match dateStamp pid msg

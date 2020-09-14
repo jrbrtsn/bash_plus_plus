@@ -244,7 +244,7 @@ function regex_read ()
    IFS= read $@ || return 1
 
    # Apply regular expression parsing to read buffer
-   if [[ "$REPLY" =~ $regex ]]; then
+   if [[ $REPLY =~ $regex ]]; then
       # Place results on return stack
       count=${#BASH_REMATCH[@]}
       for (( ndx= 0; ndx < count; ++ndx )); do

@@ -69,7 +69,7 @@ while true; do
 
       *)
          if (( !is_boundKey )); then
-            # If we get to here, then an automatically assigned hotkey was pressed
+            # If we get to here, then REPLY contains the zero based index of the item chosen by the user
             1>&2 echo -en "Thank you for selecting '${DATA_CHOICES[$REPLY]}'.\nPress return to continue "
             read
          fi

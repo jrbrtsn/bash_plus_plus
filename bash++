@@ -304,3 +304,448 @@ function die ()
    exit 1
 }
 
+function hkselect
+################################################
+# Approximate replacement for bash's builtin `select'.
+# hkselect() does not require the user to press enter key
+# to finalize choice.
+# Usage: hkselect arg1 ...
+#
+# User choices are supplied as args to the function, and
+# the hotkey may be indicated by placing an `&' in
+# the preceding character, e.g.
+#   press&kplease
+# where `k' is the hotkey. If a hotkey is not indicated,
+# then one will be assigned automatically.
+#
+# Command flags:
+# -b 'keystr|funcname|arg1 arg2 ...'   Bind escape-based key (F1-F12, Arrows, ...) to a function
+# -B global_arr_name                   Array of -b arguments
+# -p left_pad                          Left margin padding count
+# -r 'rebuke string'                   String to print when user pressed invalid key
+# -s 'subtitle string'                 Subtitle to print below choices
+# -w max_width                         Limit the width of choices layout
+#
+# Global variables:
+#   HKSELKEY       - key the user pressed when making a successful choice
+#   REPLY          - zero based index of the arg whose hotkey was pressed
+#
+# RETURN: upon return the value of HKSELKEY will contain the key which
+# the user pressed, and REPLY will contain the 0-based index of the
+# matching argument passed when hkselect() was called
+#
+# Sat Mar 27 16:52:53 EDT 2021
+# John Robertson <john@rrci.com>
+{
+   # Stash current shell options
+   local __opts=$(shopt -o -p nounset errexit)
+   set -ue +xv
+
+   # We cache composed labels and layout information
+   declare -gA _HKSEL_CACHE
+
+   local tmp arg argc dcarg i j len pos lr lcol uc dc warg wlbl wrow wcol argc
+   local TROWS TWIDTH BLD NRM UND HK subtitle maxwidth pad=2
+   local -A rv_hk_m hk_m bkfunc_m  bkargs_m
+   local opt OPTIND bkey bfunc bfuncargs is_cached=0
+   # namerefs for cached information
+   local -n nr_nrows nr_ncols nr_hk_m nr_wcol_a nr_warg_a nr_lbl_a
+
+   TWIDTH=$(tput cols)
+   TROWS=$(tput lines)
+   UND=$(tput smul)
+   BLD=$(tput bold)
+   NRM=$(tput sgr0)
+   HK="$(tput setaf 4)$(tput setab 7)$BLD"
+
+   local rebuke="${BLD}Please choose one of the highlighted keys$NRM"
+
+   while getopts ':b:B:p:r:s:w:' opt; do
+      case $opt in
+         b) IFS='|' read bkey bkfunc bkargs <<<"$OPTARG"
+
+            # Add binding to the bound-key map
+            bkfunc_m[$bkey]=$bkfunc
+            bkargs_m[$bkey]="$bkargs"
+            ;;
+         B)
+            local -n _hkselect_bkargs_a=$OPTARG
+            if [[ -n "${_hkselect_bkargs_a[@]:+foo}" ]]; then
+               for arg in "${_hkselect_bkargs_a[@]}"; do
+                  IFS='|' read bkey bkfunc bkargs <<<"$arg" || true
+                  # Add binding to the bound-key map
+                  bkfunc_m[$bkey]=$bkfunc
+                  bkargs_m[$bkey]="$bkargs"
+               done
+            fi
+            # unreference supplied array
+            unset -n _hkselect_bkargs_a
+            ;;
+         p) pad=$OPTARG;;
+         r) rebuke="$OPTARG";;
+         s) subtitle="$OPTARG";;
+         w) TWIDTH=$OPTARG;;
+         \?) die "Invalid option: -$OPTARG";;
+      esac
+   done
+   shift $((OPTIND-1))
+
+   # Make sure this variable is bound, and empty
+   HKSELKEY=
+
+   # possibly clip TWIDTH
+   [[ -n "${maxwidth:+foo}" ]] && ((TWIDTH = TWIDTH > maxwidth ? maxwidth : TWIDTH))
+
+   ### Determine all hotkey assignments
+   local arg_ndx argcat sum
+   local -a pri_char_a dcarg_a
+   local -A ccount_map
+   # Determine argc, identify supplied hotkey assignments
+   argc=${#@}
+   for ((i=0; i < argc; ++i)); do
+      # function name is at $0, so we start at $1
+      (( arg_ndx = i + 1 ))
+
+      # copy arg into convenient variable
+      eval arg=\${$arg_ndx}
+
+      argcat+="$arg"
+
+      # Stash a downcased version of arg for efficiency
+      dcarg=$(tr '[:upper:]' '[:lower:]' <<<"$arg")
+      dcarg_a[$i]="$dcarg"
+
+      # Look for an ampersand
+      tmp=${arg%%&*}
+      len=${#tmp}
+      # May not exist
+      [[ $len = ${#arg} ]] && continue
+
+      (( pos = len + 1 )) || true
+
+      # Get lowercase hotkey character
+      dc=${dcarg:pos:1}
+
+      # Map to arg index forward & backward
+      hk_m[$dc]=$i
+      rv_hk_m[$i]=$dc
+   done
+
+   #### Checksum to uniquely identify this content ###
+   sum=$(md5sum <<<"$TWIDTH${argcat:+$argcat}")
+   # Strip junk at end of sum
+   sum=${sum%  -}
+
+   # Our cache key is caller information
+   local ckey=$(caller)
+
+   # check for a matching key in the cache
+   if [[ -n "${_HKSEL_CACHE[$ckey]:+foo}" ]]; then
+      # Key was found, so compare value against current checksum
+      if [[ ! ${_HKSEL_CACHE[$ckey]} = $sum ]]; then
+         # Cache is stale, discard it
+         unset nrows_${sum} ncols_${sum} warg_a_${sum} wcol_a_${sum} lbl_a_${sum} hk_m_${sum}
+      else
+         # Use previously cached results
+         is_cached=1
+      fi
+   else
+      # Map the checksum on ckey
+      _HKSEL_CACHE[$ckey]=$sum
+   fi
+
+   # Set our namerefs
+   nr_nrows=nrows_${sum}
+   nr_ncols=ncols_${sum}
+   nr_warg_a=warg_a_${sum}
+   nr_wcol_a=wcol_a_${sum}
+   nr_lbl_a=lbl_a_${sum}
+   nr_hk_m=hk_m_${sum}
+
+   if (( ! is_cached )); then
+      # Create new global variables with unique names
+      declare -g nrows_${sum} ncols_${sum}
+      declare -ga warg_a_${sum} wcol_a_${sum} lbl_a_${sum}
+      declare -gA hk_m_${sum}
+
+      # Copy in results obtained above
+      for dc in "${!hk_m[@]}"; do
+         nr_hk_m[$dc]=${hk_m[$dc]}
+      done
+   fi
+
+   # Assign hotkeys and perform layout only if not cached
+   if (( ! is_cached )); then
+      # Make character count map as needed
+      for ((i=0; i < argc; ++i)); do
+
+         # Already be mapped?
+         [[ -n ${rv_hk_m[$i]:+foo} ]] && continue
+
+         # Unpack downcased arg
+         dcarg="${dcarg_a[$i]}"
+
+         # Check for usable hotkey characters
+         for ((j=0; j < ${#dcarg}; ++j)); do
+            dc=${dcarg:$j:1}
+            # Skip disallowed charcters
+            [[ -n ${nr_hk_m[$dc]:+foo} || ! $dc =~ [[:alnum:]] ]] && continue
+            [[ -n ${ccount_map[$dc]:+foo} ]] || ccount_map[$dc]=0
+            (( ++ccount_map[$dc] ))
+         done
+      done
+
+      # Get ccount_map contents into pri_char_a, characters sorted on ascending count
+      read -d $'\0' -a pri_char_a < <(
+         cut -f1 < <(
+            sort -n -k2 < <(
+               for key in "${!ccount_map[@]}"; do
+                  echo -e "$key\t${ccount_map[$key]}"
+               done
+            )
+         )
+      ) || true
+
+      # Assign hotkeys to args
+      for ((i=0; i < argc; ++i)); do
+         # Skip existing assignments
+         [[ -n ${rv_hk_m[$i]:+foo} ]] && continue
+
+         # Look for prioritized hotkey
+         for (( j= 0; j < ${#pri_char_a[@]}; ++j )); do
+            dc=${pri_char_a[$j]}
+            dcarg="${dcarg_a[$i]}"
+            
+            # Already mapped? character in string?
+            [[ -z ${nr_hk_m[$dc]:+foo} && $dcarg =~ $dc  ]] || continue
+
+            # map hotkey foward and backward
+            nr_hk_m[$dc]=$i
+            rv_hk_m[$i]=$dc
+            break
+         done
+      done
+      # No longer needed
+      unset ccount_map pri_char_a
+      # FIXME: here we *assume* a hotkey was assigned to every arg
+
+      # Fix up labels, etc
+      for ((i=0; i < argc; ++i)); do
+
+         # Get a convenient copy of arg
+         (( arg_ndx = i + 1 ))
+         eval arg=\${$arg_ndx}
+
+         # Handle case of args with no hotkey supplied
+         if [[ ! $arg =~ \& ]]; then
+
+            # Catch common mistake
+            [[ -z "${rv_hk_m[$i]:+foo}" ]] &&\
+               die 'ERROR: command flag args must precede choice args here: '$(caller)
+
+            # Remember the length of the argument
+            len=${#arg}
+            nr_warg_a[$i]=$len
+            dc=${rv_hk_m[$i]}
+            dcarg="${dcarg_a[$i]}"
+
+            # Identify the position where the character belongs
+            tmp=${dcarg%%$dc*}
+            len=${#tmp}
+            (( pos = len + 1 ))
+
+         else # arg was supplied with hotkey pre-assigned
+
+            # Remember the length of the argument, adjusted for ampersand
+            (( len = ${#arg} - 1 ))
+            nr_warg_a[$i]=$len
+            dc=${rv_hk_m[$i]}
+            tmp=${arg%%&*}
+            len=${#tmp}
+            (( pos = len + 2 ))
+         fi
+         uc=$(tr '[:lower:]' '[:upper:]' <<<$dc)
+         nr_lbl_a[$i]="$UND${arg:0:$len}$HK$uc$NRM$UND${arg:$pos}$NRM"
+      done
+
+      # Iterate to find optimum layout
+      nr_nrows=1
+      nr_ncols=$argc
+      while true; do
+
+         wcol=0
+
+         # cycle through supplied arguments
+         for (( i=0; i < argc; ++i )); do
+
+            # On which logical column are we operating?
+            (( lcol = i % nr_ncols )) || true
+
+            # Reset row width at first column
+            (( wrow = lcol ? wrow : 0 )) || true
+
+            # compute width of current label
+            warg=${nr_warg_a[$i]}
+            (( wlbl = warg + pad ))
+
+            # Go with max of previous column width, or current lbl width
+            (( wcol = wlbl > wcol ? wlbl : wcol ))
+
+            # Accumulate the column width
+            (( wrow += wcol ))
+
+
+            if (( wrow > TWIDTH )); then
+               # Try adding a row
+               (( ++nr_nrows ))
+               break
+            fi
+            # Remember the column width
+            nr_wcol_a[$lcol]=$wcol
+         done
+
+         (( nr_nrows > TROWS )) && die "$nr_nrows is too many rows, and I can't scroll!"
+         # Success criterion
+         (( wrow <= TWIDTH )) && break
+
+         # adjust ncols to reflect addition of a new row
+         (( nr_ncols = argc / nr_nrows + (argc % nr_nrows ? 1 : 0) ))
+      done
+   fi # is_cached
+
+   # Present choices to user
+   for (( i=0; i < argc; ++i )); do
+      # On which logical row are we operating?
+      (( lr = i / nr_ncols )) || true
+      
+      # On which logical column are we operating?
+      (( lcol = i % nr_ncols )) || true
+
+      # Move down to first line on new row, but not first time
+      (( i && !lcol )) && echo
+
+      # Reset row width at first column
+      if (( ! lcol )); then
+         wrow=0
+         pos=$pad
+      fi
+
+      # Put cursor at beginning of column on this line
+      (( fwd = pos - wrow ))
+
+      tput cuf $fwd
+      (( wrow += fwd ))
+
+      # print the label
+      echo -n "${nr_lbl_a[$i]}"
+      warg=${nr_warg_a[$i]}
+      (( wrow += warg ))
+      # Update horizontal position
+      wcol=${nr_wcol_a[$lcol]}
+      (( pos += wcol ))
+   done
+
+   # Save cursor position
+   echo && tput sc
+
+   [[ -n ${subtitle:+foo} ]] && echo -n "$subtitle"
+
+   # Hide cursor
+   tput civis
+
+   # varibles for the loop below
+   local escbuf= is_invalid=0
+
+   # User now makes a choice
+   while true; do
+
+      # read will return when a key is pressed
+      read -sN 1 HKSELKEY
+
+      # We may have a function bound to enter key
+      if [[ $'\n' = $HKSELKEY ]]; then
+         bkey=$'\n'
+         if [[ -n "${bkfunc_m[$bkey]:+foo}" ]]; then
+            # Get the callback function
+            bkfunc=${bkfunc_m[$bkey]}
+            bkargs=${bkargs_m[$bkey]}
+            # Fire the callback function
+            eval $bkfunc \$bkargs
+            # Check return code
+            (( $? )) || break
+         else
+            is_invalid=1
+         fi
+      fi
+
+      # Handling of bound keys
+      if (( !is_invalid && ${#escbuf} )); then
+         # Append key to escbuf
+         escbuf+=$HKSELKEY
+         # See if there is more to come
+         if ! read -st 0; then
+            if [[ -n "${bkfunc_m[$escbuf]:+foo}" ]]; then
+               # Get the callback function
+               bkfunc="${bkfunc_m[$escbuf]}"
+               bkargs="${bkargs_m[$escbuf]}"
+               # Clear HKSELKEY
+               HKSELKEY=
+               # Fire callback function
+               eval $bkfunc \$bkargs
+               # Check return code
+               (( $? )) || break
+            else
+               escbuf=
+               is_invalid=1
+            fi
+         else
+            # Need more characters
+            continue
+         fi
+      fi
+
+      # ESC could mean exit, or that a bound key was pressed
+      if [[ 0 = $is_invalid && $'\e' = $HKSELKEY ]]; then
+         # Check for more queued keystrokes
+         read -st 0 || break
+
+         # more queued keystrokes means we buffer this
+         escbuf=$HKSELKEY
+         continue
+      fi
+
+      # Check for possible unescaped hotkeys
+      if [[ 0 = $is_invalid && -n $HKSELKEY ]]; then
+         # Look for a case insensitive match in our hotkey map
+         dc=$(tr '[:upper:]' '[:lower:]' <<<$HKSELKEY)
+         if [[ -n ${nr_hk_m[$dc]:+foo} ]]; then
+            i=${nr_hk_m[$dc]}
+            (( REPLY = i )) || true
+            echo
+            break
+         else
+            is_invalid=1
+         fi
+      fi
+
+      # Possibly rebuke user
+      if (( is_invalid )); then
+         tput rc
+         echo -n "$rebuke"
+         sleep 0.5
+         tput rc
+         tput el
+         [[ -n ${subtitle:+foo} ]] && echo -n "$subtitle"
+      fi
+      is_invalid=0
+   done
+
+   # Restore the cursor
+   tput cvvis
+
+   # Discard references
+   unset -n nr_nrows nr_ncols nr_hk_m nr_wcol_a nr_warg_a nr_lbl_a
+
+   # Restore options
+   eval $__opts
+}

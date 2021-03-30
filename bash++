@@ -23,8 +23,6 @@ function RTN_empty
 {
    local rtn=0
    [[ -n "${__RTN_STK:+foo}" ]] && rtn=1
-#1>&2 echo; declare -p __RTN_STK sz
-#1>&2 read -p "$BASH_SOURCE:$LINENO  $FUNCNAME() OK? " 
    return $rtn
 }
 
@@ -54,8 +52,6 @@ function RTN_push
       shift
 
    done
-#1>&2  echo; declare -p __RTN_STK
-#1>&2 read -p "$BASH_SOURCE:$LINENO  $FUNCNAME() OK? " 
 
    # Restore options
    eval $__opts
@@ -65,20 +61,14 @@ function BackTrace
 ############################################################
 # Generate a GDB(ish) style stack dump
 {
-   local i j bash_lineno
+   local i j
 
    1>&2 echo "----------- Stack Dump ------------"
    for ((i= 1; i < ${#BASH_SOURCE[@]}; ++i)); do
 
       ((j= i-1)) || true
-      bash_lineno=${BASH_LINENO[$j]}
-#      if ((! j)); then
-#         if [[ -n "${1:+foo}" ]]; then
-#            bash_lineno=$1
-#         fi
-#      fi
 
-      1>&2 echo -e "\ti=$i, j=$j ${BASH_SOURCE[$i]}:$bash_lineno ${FUNCNAME[$i]} ()"
+      1>&2 echo -e "\ti=$i, j=$j ${BASH_SOURCE[$i]}:${BASH_LINENO[$j]} ${FUNCNAME[$i]} ()"
    done
 }
 

@@ -25,9 +25,22 @@ function FnKey_cb
    is_boundKey=1
 }
 
+function cleanup
+################################################
+# Cleanup on exit
+{
+# Restore cursor 
+   tput cvvis
+# Reset any text attributes
+   tput sgr0 
+}
+
 ###################################
 ### Execution starts here #########
 ###################################
+
+# cleanup on exit
+trap cleanup 0
 
 # Data might come from a dynamic source, like a file or pipe or ...
 declare -a DATA_CHOICES=([0]=one [1]=two [2]=three)

@@ -8,8 +8,11 @@
 # Added malloc, new, delete, call, and fetch
 #
 
+# You can check this to see if bash++ has been sourced
+BASH_PLUS_PLUS=true
+
 # Global array to use as a return stack
-declare -g -a __RTN_STK
+declare -a __RTN_STK
 
 function RTN_empty
 ############################################################
@@ -18,7 +21,11 @@ function RTN_empty
 #    none
 #
 {
-   return ${#__RTN_STK[@]}
+   local rtn=0
+   [[ -n "${__RTN_STK:+foo}" ]] && rtn=1
+#1>&2 echo; declare -p __RTN_STK sz
+#1>&2 read -p "$BASH_SOURCE:$LINENO  $FUNCNAME() OK? " 
+   return $rtn
 }
 
 function RTN_push
@@ -29,28 +36,50 @@ function RTN_push
 #
 {
    local __opts=$(shopt -o -p nounset errexit)
-   # Necessary to avoid "unbound variable" exception for empty stack
-   set +ue
+
+   set -ue
 
    # For readability, store array index value here before using
-   local -i __ndx
+   local -i ndx
+   ndx=${__RTN_STK:+${#__RTN_STK[@]}}
 
    # Push arguments onto the stack
-   while [[ -n "$1" ]]; do
-
-      # Array index is current size of array
-      __ndx=${#__RTN_STK[@]}
+   while [[ -n "${1:+foo}" ]]; do
 
       # Place argument onto stack
-      __RTN_STK[$__ndx]="$1"
+      __RTN_STK[$ndx]="$1"
 
-      # Discard argument from argv
+      ((++ndx))
+      # Discard argument
       shift
 
    done
+#1>&2  echo; declare -p __RTN_STK
+#1>&2 read -p "$BASH_SOURCE:$LINENO  $FUNCNAME() OK? " 
 
    # Restore options
    eval $__opts
+}
+
+function BackTrace
+############################################################
+# Generate a GDB(ish) style stack dump
+{
+   local i j bash_lineno
+
+   1>&2 echo "----------- Stack Dump ------------"
+   for ((i= 1; i < ${#BASH_SOURCE[@]}; ++i)); do
+
+      ((j= i-1)) || true
+      bash_lineno=${BASH_LINENO[$j]}
+#      if ((! j)); then
+#         if [[ -n "${1:+foo}" ]]; then
+#            bash_lineno=$1
+#         fi
+#      fi
+
+      1>&2 echo -e "\ti=$i, j=$j ${BASH_SOURCE[$i]}:$bash_lineno ${FUNCNAME[$i]} ()"
+   done
 }
 
 function RTN_pop
@@ -63,20 +92,37 @@ function RTN_pop
 {
    # Necessary to avoid "unbound variable" exception
    local __opts=$(shopt -o -p nounset)
-   set +u
+   set -u
 
-   local -i __arg __ndx
+   local -i arg ndx sz
+
+   # Get current size of stack
+   sz=${__RTN_STK:+${#__RTN_STK[@]}}
+
+   # Generate correct array index
+   (( ndx = sz - 1 )) || true
+
+#1>&2  echo; declare -p sz ndx
+#1>&2 read -p "$BASH_SOURCE:$LINENO  $FUNCNAME() OK? " 
    # Walk through supplied references backwards
-   for (( __arg= $#; __arg ; --__arg )); do
+   for (( arg= $#; arg ; --arg )); do
 
-      # Generate correct array index
-      (( __ndx = ${#__RTN_STK[@]} - 1 ))
+      if ((ndx < 0)); then
+         local line file
+         # Print out a stack dump
+#1>&2  echo; declare -p __RTN_STK sz
+#1>&2 read -p "$BASH_SOURCE:$LINENO  $FUNCNAME() OK? " 
+         BackTrace
+         read line file < <(caller)
+         die "ERROR: ndx= '$ndx' cannot have a negative value; called from $file:$line"
+      fi
 
       # Copy item on stack to *reference
-      eval ${!__arg}="\${__RTN_STK[\$__ndx]}"
+      eval ${!arg}="\${__RTN_STK[\$ndx]}"
 
       # pop item from stack, free memory
-      unset __RTN_STK[$__ndx]
+      unset __RTN_STK[$ndx]
+      ((--ndx)) || true
    done
 
    # Restore options
@@ -84,7 +130,7 @@ function RTN_pop
 }
 
 # Global heap counter integer 
-declare -g -i __HC=0
+declare -i __HC=0
 
 function malloc
 ############################################################
@@ -100,13 +146,13 @@ function malloc
    (( ++__HC ))
 
    # compose unique "address" for this allocation
-   local __addr="__heap_${__HC}"
+   local addr="__heap_${__HC}"
 
    # "allocate" object gets marked for global visibility,
    # and possibly other 'declare' flags
-   declare -g $@ $__addr
+   declare -g $@ $addr
    # push "address" onto result stack
-   RTN_push $__addr
+   RTN_push $addr
 }
 
 function new ()
@@ -153,16 +199,16 @@ function delete ()
 #
 {
    # address of object
-   local __this=$1
+   local this=$1
 
    # class name of object
-   eval local __class=\${$__this[__class]}
+   eval local __class=\${$this[__class]}
 
    # Call class destructor
-   eval $__class::~$__class $__this
+   eval $__class::~$__class $this
 
    # Free object memory
-   unset $__this
+   unset $this
 }
 
 
@@ -190,9 +236,9 @@ function fetch ()
 #
 {
    # address of object
-   local __this=${1%.?*} __member=${1#?*.}
+   local this=${1%.?*} __member=${1#?*.}
 
-   eval RTN_push \"\${$__this[$__member]}\"
+   eval RTN_push \"\${$this[$__member]}\"
 
 }
 
@@ -208,14 +254,14 @@ function call ()
 #
 {
    # address of object
-   local __this=${1%.?*} __func=${1#?*.}
+   local this=${1%.?*} __func=${1#?*.}
    # class name of object
-   eval local __class=\${$__this[__class]}
+   eval local __class=\${$this[__class]}
 
    shift
 
    # Call class member function
-   eval $__class::$__func $__this \$@
+   eval $__class::$__func $this \$@
 }
 
 function regex_read ()
@@ -266,8 +312,9 @@ function die ()
 # then exit indicating error.
 #
 {
-  read LINE FILE < <(caller)
-  1>&2 echo "$FILE:$LINE $@"
-  exit 1
+   local line file
+   read line file < <(caller)
+   1>&2 echo "$file:$line $@"
+   exit 1
 }
 

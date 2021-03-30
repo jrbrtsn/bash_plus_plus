@@ -85,6 +85,8 @@ function FirstClass::wordCount ()
 ###################################
 
 # Create an instance of FirstClass
+#set -x
+#PS4='$BASH_SOURCE:$LINENO+ '
 new FirstClass 'Here are' '3 constructor' 'arguments'
 
 # Pop the address of the object into a handle

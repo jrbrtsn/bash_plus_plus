@@ -390,8 +390,9 @@ function hkselect
    done
    shift $((OPTIND-1))
 
-   # Make sure this variable is bound, and empty
+   # Make sure these are bound, and empty
    HKSELKEY=
+   REPLY=
 
    # possibly clip TWIDTH
    [[ -n "${maxwidth:+foo}" ]] && ((TWIDTH = TWIDTH > maxwidth ? maxwidth : TWIDTH))

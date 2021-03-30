@@ -5,6 +5,7 @@
 #
 # John Robertson <john@rrci.com>
 # Initial release: Mon Sep 14 10:29:20 EDT 2020
+# Upgraded to use hkselect: Tue Mar 30 13:32:11 EDT 2021
 #
 
 # Halt on error, no globbing, no unbound variables
@@ -37,27 +38,24 @@ while regex_read '^([^ ]+ [^ ]+ [^ ]+) .*systemd\[([^:]*)\]: (.*)' -u $FD; do
    RTN_pop full_match dateStamp pid msg
    # Clear the terminal
    clear
+   echo
+
 #  "Full match is: '$full_match'"
    echo "systemd message: pid= '$pid', dateStamp= '$dateStamp',  msg= '$msg'"
 
-   # Use builtin bash menuing to branch on user's choice
-   PS3='Action? '
-   select action in 'ignore' 'review' 'quit'; do
+   hkselect -s 'Please select an action' '&Ignore' '&Review' '&Quit'
 
-      case $action in
+   case $HKSELKEY in
 
-         ignore) ;; # no worries
+      i|I) ;; # no worries
 
-         review) read -p 'Chase up all relevant information, present to user. [Return to continue] ';;
+      r|R) read -p 'Chase up all relevant information, present to user. [Return to continue] ';;
 
-         quit) exit 0;;
+      q|Q) break;;
 
-      esac
+      $'\e') echo; break;;
 
-      # go get another line from syslog
-      break
-
-   done # End of 'select' menu loop
+   esac
 
 done
 

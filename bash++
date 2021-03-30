@@ -92,16 +92,12 @@ function RTN_pop
    # Generate correct array index
    (( ndx = sz - 1 )) || true
 
-#1>&2  echo; declare -p sz ndx
-#1>&2 read -p "$BASH_SOURCE:$LINENO  $FUNCNAME() OK? " 
    # Walk through supplied references backwards
    for (( arg= $#; arg ; --arg )); do
 
       if ((ndx < 0)); then
          local line file
          # Print out a stack dump
-#1>&2  echo; declare -p __RTN_STK sz
-#1>&2 read -p "$BASH_SOURCE:$LINENO  $FUNCNAME() OK? " 
          BackTrace
          read line file < <(caller)
          die "ERROR: ndx= '$ndx' cannot have a negative value; called from $file:$line"

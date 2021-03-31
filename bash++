@@ -606,6 +606,8 @@ function hkselect
          done
 
          (( nr_nrows > TROWS )) && die "$nr_nrows is too many rows, and I can't scroll!"
+         
+         [[ -z "${wrow:+foo}" ]] && die "No items from which to choose!"
          # Success criterion
          (( wrow <= TWIDTH )) && break
 
